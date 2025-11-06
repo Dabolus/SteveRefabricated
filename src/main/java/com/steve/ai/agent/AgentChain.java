@@ -5,6 +5,9 @@ import com.steve.ai.memory.SteveMemory;
 import java.util.Map;
 import java.util.HashMap;
 
+// TODO: Will be implemented later - agent chain orchestration
+// Currently not used in the execution pipeline
+// Placeholder for future multi-step reasoning chains
 public class AgentChain {
     private final SteveEntity steve;
     private final SteveMemory memory;

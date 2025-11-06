@@ -3,6 +3,9 @@ package com.steve.ai.agent;
 import com.steve.ai.entity.SteveEntity;
 import java.util.*;
 
+// TODO: Will be implemented later - proper ReAct (Reasoning + Acting) agent framework
+// Currently the main execution flow bypasses this and goes directly from LLM to ActionExecutor
+// This is placeholder scaffolding for future agent loop implementation
 public class ReActAgent {
     private final SteveEntity steve;
     private final List<String> thoughtHistory;

@@ -1,5 +1,8 @@
 package com.steve.ai.agent;
 
+// TODO: Will be implemented later - tool abstraction for agent framework
+// Currently tools are executed directly through ActionExecutor
+// Placeholder for future tool-calling capabilities
 public class ToolWrapper {
     private final String name;
     private final String description;
