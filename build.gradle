@@ -1,89 +1,90 @@
 plugins {
-    id 'eclipse'
-    id 'idea'
+    id 'fabric-loom' version '1.6-SNAPSHOT'
     id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
-version = '1.0.0'
-group = 'com.steve.ai'
+version = project.mod_version
+group = project.maven_group
 
 base {
-    archivesName = 'steve-ai-mod'
+    archivesName = project.archives_base_name
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://maven.fabricmc.net/'
+    }
+}
 
-minecraft {
-    mappings channel: 'official', version: '1.20.1'
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.layered {
+        officialMojangMappings()
+    }
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
 
+loom {
+    splitEnvironmentSourceSets()
     runs {
         client {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                steve {
-                    source sourceSets.main
-                }
-            }
+            client()
         }
-
         server {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                steve {
-                    source sourceSets.main
-                }
-            }
+            server()
         }
     }
 }
 
-sourceSets.main.resources { srcDir 'src/generated/resources' }
-
-repositories {
-    mavenCentral()
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/generated/resources'
+        }
+    }
 }
 
-dependencies {
-    minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
-    
-    // HTTP client - Using Java 11+ built-in HttpClient (no external dependencies needed!)
-    // JSON parsing - Minecraft already includes Gson
-    
-    // Baritone API (will need to be added manually to libs folder)
-    // implementation files('libs/baritone-api-1.20.1.jar')
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withSourcesJar()
 }
 
 tasks.named('jar', Jar).configure {
     manifest {
-        attributes([
-            'Specification-Title': 'Steve AI Mod',
-            'Specification-Vendor': 'Steve AI',
+        attributes(
+            'Specification-Title': 'Steve AI Refabricated Mod',
+            'Specification-Vendor': 'Steve AI Refabricated',
             'Specification-Version': '1',
             'Implementation-Title': project.name,
-            'Implementation-Version': project.jar.archiveVersion,
-            'Implementation-Vendor': 'Steve AI'
-        ])
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Steve AI Refabricated'
+        )
     }
+}
 
-    finalizedBy 'reobfJar'
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
 }
 
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifact jar
+            from components.java
         }
     }
     repositories {
         maven {
-            url "file://${project.projectDir}/mcmodsrepo"
+            url = uri("file://${project.projectDir}/mcmodsrepo")
         }
     }
 }

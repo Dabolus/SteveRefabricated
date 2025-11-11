@@ -1,9 +1,6 @@
 {
   "pack": {
-    "description": "Steve AI Mod Resources",
-    "pack_format": 15,
-    "forge:resource_pack_format": 15,
-    "forge:data_pack_format": 12
+    "description": "Steve AI Refabricated Mod Resources",
+    "pack_format": 34
   }
 }
-

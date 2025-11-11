@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "steve",
+  "version": "${version}",
+  "name": "Steve AI Refabricated Mod",
+  "description": "AI-controlled Steve entities that respond to natural language commands to gather, build, and assist players (ported from Forge to Fabric).",
+  "authors": [
+    "Steve AI Refabricated Team"
+  ],
+  "contact": {
+    "sources": "https://github.com/Dabolus/SteveRefabricated"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.steve.ai.refabricated.SteveMod"
+    ],
+    "client": [
+      "com.steve.ai.refabricated.client.SteveClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "1.21.1",
+    "fabric-api": ">=0.104.0",
+    "java": ">=21"
+  }
+}
