@@ -6,23 +6,33 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Loads Minecraft structure templates from NBT files for sequential block-by-block placement
  */
 public class StructureTemplateLoader {
+    
+    private static final String CREATEMOD_BASE_URL = "https://createmod.com";
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_2)
+        .connectTimeout(Duration.ofSeconds(10))
+        .build();
     
     public static class TemplateBlock {
         public final BlockPos relativePos;
@@ -51,87 +61,167 @@ public class StructureTemplateLoader {
     }
     
     /**
-     * Load a structure from an NBT file (either custom or Minecraft's native format)
+     * Load a structure from createmod.com
      */
-    public static LoadedTemplate loadFromNBT(ServerLevel level, String structureName) {        File structuresDir = new File(System.getProperty("user.dir"), "structures");
-        SteveMod.LOGGER.info("Structures directory: {}", structuresDir.getAbsolutePath());
+    public static LoadedTemplate loadFromNBT(String structureName) {
+        SteveMod.LOGGER.info("Searching for structure '{}' on createmod.com", structureName);
+        LoadedTemplate fromUrl = loadFromURL(structureName);
         
-        File exactMatch = new File(structuresDir, structureName + ".nbt");
-        if (exactMatch.exists()) {
-            SteveMod.LOGGER.info("Found structure (exact match): {}", exactMatch.getName());
-            return loadFromFile(exactMatch, structureName);
+        if (fromUrl == null) {
+            SteveMod.LOGGER.warn("Structure '{}' not found on createmod.com", structureName);
         }
         
-        String withSpaces = structureName.replaceAll("(\\w)(\\p{Upper})", "$1 $2").toLowerCase();
-        File spacedMatch = new File(structuresDir, withSpaces + ".nbt");
-        if (spacedMatch.exists()) {
-            SteveMod.LOGGER.info("Found structure (spaced match): {}", spacedMatch.getName());
-            return loadFromFile(spacedMatch, structureName);
-        }
-        
-        if (structuresDir.exists() && structuresDir.isDirectory()) {
-            File[] files = structuresDir.listFiles((dir, name) -> {
-                if (!name.endsWith(".nbt")) return false;
-                
-                String nameWithoutExt = name.substring(0, name.length() - 4);
-                
-                // Normalize both strings: lowercase, remove spaces and underscores
-                String normalizedFile = nameWithoutExt.toLowerCase().replace(" ", "").replace("_", "");
-                String normalizedSearch = structureName.toLowerCase().replace(" ", "").replace("_", "");
-                
-                return normalizedFile.equals(normalizedSearch);
-            });
-            
-            if (files != null && files.length > 0) {
-                SteveMod.LOGGER.info("Found structure (fuzzy match): {}", files[0].getName());
-                return loadFromFile(files[0], structureName);
-            }
-        }
-        
-        try {
-            ResourceLocation resourceLocation = ResourceLocation.fromNamespaceAndPath("steve", structureName);
-            var templateManager = level.getStructureManager();
-            var template = templateManager.get(resourceLocation);
-            
-            if (template.isPresent()) {                return loadFromMinecraftTemplate(template.get(), structureName);
-            }
-        } catch (Exception e) {        }
-        
-        SteveMod.LOGGER.warn("Structure '{}' not found. Available structures: {}", 
-            structureName, getAvailableStructures());
-        return null;
+        return fromUrl;
     }
     
     /**
-     * Load from a custom NBT file
+     * Load a structure from createmod.com by searching and downloading
      */
-    private static LoadedTemplate loadFromFile(File file, String name) {
-        try (InputStream inputStream = new FileInputStream(file)) {
-            CompoundTag nbt = NbtIo.readCompressed(inputStream, NbtAccounter.unlimitedHeap());
-            return parseNBTStructure(nbt, name);
-        } catch (IOException e) {
-            SteveMod.LOGGER.error("Failed to load structure from file: {}", file, e);
+    private static LoadedTemplate loadFromURL(String searchTerm) {
+        try {
+            // Step 1: Search for the schematic
+            String searchUrl = CREATEMOD_BASE_URL + "/search/" + searchTerm.replace(" ", "-") + "?sort=1&rating=5&mcv=1.21.X";
+            SteveMod.LOGGER.info("Searching: {}", searchUrl);
+            
+            String searchHtml = fetchUrl(searchUrl);
+            if (searchHtml == null) {
+                SteveMod.LOGGER.warn("Failed to fetch search results");
+                return null;
+            }
+            
+            // Step 2: Find first schematic link
+            String schematicPath = findFirstSchematicLink(searchHtml);
+            if (schematicPath == null) {
+                SteveMod.LOGGER.warn("No schematic found for search term: {}", searchTerm);
+                return null;
+            }
+            
+            // Step 3: Fetch the schematic page
+            String schematicUrl = CREATEMOD_BASE_URL + schematicPath;
+            SteveMod.LOGGER.info("Found schematic page: {}", schematicUrl);
+            
+            String schematicHtml = fetchUrl(schematicUrl);
+            if (schematicHtml == null) {
+                SteveMod.LOGGER.warn("Failed to fetch schematic page");
+                return null;
+            }
+            
+            // Step 4: Find the .nbt file download link
+            String nbtFilePath = findNbtFileLink(schematicHtml);
+            if (nbtFilePath == null) {
+                SteveMod.LOGGER.warn("No .nbt file found on schematic page");
+                return null;
+            }
+            
+            // Step 5: Download the .nbt file
+            String nbtUrl = CREATEMOD_BASE_URL + nbtFilePath;
+            SteveMod.LOGGER.info("Downloading NBT file: {}", nbtUrl);
+            
+            byte[] nbtData = downloadFile(nbtUrl);
+            if (nbtData == null) {
+                SteveMod.LOGGER.warn("Failed to download .nbt file");
+                return null;
+            }
+            
+            // Step 6: Parse the NBT data
+            return loadFromBytes(nbtData, searchTerm);
+            
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error loading structure from URL", e);
             return null;
         }
     }
     
     /**
-     * Load from Minecraft's native StructureTemplate
-     * Note: This is a simplified version that works with NBT directly
+     * Fetch HTML content from a URL
      */
-    private static LoadedTemplate loadFromMinecraftTemplate(StructureTemplate template, String name) {
-        List<TemplateBlock> blocks = new ArrayList<>();
+    private static String fetchUrl(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200) {
+                return response.body();
+            } else {
+                SteveMod.LOGGER.warn("HTTP request failed with status: {}", response.statusCode());
+                return null;
+            }
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error fetching URL: {}", url, e);
+            return null;
+        }
+    }
+    
+    /**
+     * Find the first link to a schematic page (starts with /schematics/)
+     */
+    private static String findFirstSchematicLink(String html) {
+        Pattern pattern = Pattern.compile("<a[^>]+href=\"(/schematics/[^\"]+)\"");
+        Matcher matcher = pattern.matcher(html);
         
-        var size = template.getSize();
-        int width = size.getX();
-        int height = size.getY();
-        int depth = size.getZ();
-        
-        // This method is here for future compatibility with Minecraft's template system
-        
-        SteveMod.LOGGER.warn("Direct template loading not fully implemented, please use NBT files directly");
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
         return null;
     }
+    
+    /**
+     * Find the first .nbt file download link (starts with /api/files)
+     */
+    private static String findNbtFileLink(String html) {
+        Pattern pattern = Pattern.compile("<a[^>]+href=\"(/api/files/[^\"]+\\.nbt)\"");
+        Matcher matcher = pattern.matcher(html);
+        
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+    
+    /**
+     * Download binary file from a URL
+     */
+    private static byte[] downloadFile(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .GET()
+                .build();
+            
+            HttpResponse<byte[]> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            
+            if (response.statusCode() == 200) {
+                return response.body();
+            } else {
+                SteveMod.LOGGER.warn("HTTP request failed with status: {}", response.statusCode());
+                return null;
+            }
+        } catch (Exception e) {
+            SteveMod.LOGGER.error("Error downloading file: {}", url, e);
+            return null;
+        }
+    }
+    
+    /**
+     * Load structure from byte array
+     */
+    private static LoadedTemplate loadFromBytes(byte[] data, String name) {
+        try (InputStream inputStream = new ByteArrayInputStream(data)) {
+            CompoundTag nbt = NbtIo.readCompressed(inputStream, NbtAccounter.unlimitedHeap());
+            return parseNBTStructure(nbt, name);
+        } catch (IOException e) {
+            SteveMod.LOGGER.error("Failed to parse NBT data", e);
+            return null;
+        }
+    }
+    
+
     
     /**
      * Parse a structure from raw NBT data
@@ -184,24 +274,6 @@ public class StructureTemplateLoader {
         return new LoadedTemplate(name, blocks, width, height, depth);
     }
     
-    /**
-     * Get list of available structure templates
-     */
-    public static List<String> getAvailableStructures() {
-        List<String> structures = new ArrayList<>();
-        
-        File structuresDir = new File(System.getProperty("user.dir"), "structures");
-        if (structuresDir.exists() && structuresDir.isDirectory()) {
-            File[] files = structuresDir.listFiles((dir, name) -> name.endsWith(".nbt"));
-            if (files != null) {
-                for (File file : files) {
-                    String name = file.getName().replace(".nbt", "");
-                    structures.add(name);
-                }
-            }
-        }
-        
-        return structures;
-    }
+
 }
 

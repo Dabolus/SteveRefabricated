@@ -59,6 +59,9 @@ public class BuildStructureAction extends BaseAction {
             
             steve.setFlying(true);
             
+            // Assign this Steve to a section IMMEDIATELY upon joining
+            CollaborativeBuildManager.assignSteveToSection(collaborativeBuild, steve.getSteveName());
+            
             SteveMod.LOGGER.info("Steve '{}' JOINING collaborative build of '{}' ({}% complete) - FLYING & INVULNERABLE ENABLED", 
                 steve.getSteveName(), structureType, collaborativeBuild.getProgressPercentage());
             
@@ -168,6 +171,8 @@ public class BuildStructureAction extends BaseAction {
         
         if (collaborativeBuild != null) {
             isCollaborative = true;
+            // Assign Steve to a section immediately
+            CollaborativeBuildManager.assignSteveToSection(collaborativeBuild, steve.getSteveName());
             SteveMod.LOGGER.info("Steve '{}' JOINING existing {} collaborative build at {}", 
                 steve.getSteveName(), structureType, collaborativeBuild.startPos);
         } else {
@@ -178,6 +183,8 @@ public class BuildStructureAction extends BaseAction {
             
             collaborativeBuild = CollaborativeBuildManager.registerBuild(structureType, collaborativeBlocks, clearPos);
             isCollaborative = true;
+            // Assign the creator Steve to a section immediately
+            CollaborativeBuildManager.assignSteveToSection(collaborativeBuild, steve.getSteveName());
             SteveMod.LOGGER.info("Steve '{}' CREATED new {} collaborative build at {}", 
                 steve.getSteveName(), structureType, clearPos);
         }
@@ -211,10 +218,14 @@ public class BuildStructureAction extends BaseAction {
                     CollaborativeBuildManager.getNextBlock(collaborativeBuild, steve.getSteveName());
                 
                 if (placement == null) {
-                    if (ticksRunning % 20 == 0) {
-                        SteveMod.LOGGER.info("Steve '{}' has no more blocks! Build {}% complete", 
-                            steve.getSteveName(), collaborativeBuild.getProgressPercentage());
+                    // No more blocks to place - check if build is complete
+                    if (collaborativeBuild.isComplete()) {
+                        CollaborativeBuildManager.completeBuild(collaborativeBuild.structureId);
+                        steve.setFlying(false);
+                        result = ActionResult.success("Built " + structureType + " collaboratively!");
+                        return;
                     }
+                    // Otherwise, just wait - other Steves are still working
                     break;
                 }
                 
@@ -850,11 +861,7 @@ public class BuildStructureAction extends BaseAction {
      * Returns null if no template found (falls back to procedural generation)
      */
     private List<BlockPlacement> tryLoadFromTemplate(String structureName, BlockPos startPos) {
-        if (!(steve.level() instanceof ServerLevel serverLevel)) {
-            return null;
-        }
-        
-        var template = StructureTemplateLoader.loadFromNBT(serverLevel, structureName);
+        var template = StructureTemplateLoader.loadFromNBT(structureName);
         if (template == null) {
             return null;
         }

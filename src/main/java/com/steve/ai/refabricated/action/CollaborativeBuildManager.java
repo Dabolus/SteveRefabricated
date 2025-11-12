@@ -185,7 +185,7 @@ public class CollaborativeBuildManager {
     
     /**
      * Get the next block for a Steve to place (each Steve works on their own section)
-     * Returns null if Steve's section is complete
+     * Automatically reassigns Steve to another section if current one is complete
      */
     public static BlockPlacement getNextBlock(CollaborativeBuild build, String steveName) {
         if (build.isComplete()) {
@@ -194,9 +194,11 @@ public class CollaborativeBuildManager {
         
         build.participatingSteves.add(steveName);
         
-        // Assign Steve to a section if not already assigned
+        // Get Steve's assigned section (should already be assigned from onStart)
         Integer sectionIndex = build.steveToSectionMap.get(steveName);
         if (sectionIndex == null) {
+            // Fallback: assign now if somehow not assigned yet
+            SteveMod.LOGGER.warn("Steve '{}' was not pre-assigned to a section, assigning now", steveName);
             sectionIndex = assignSteveToSection(build, steveName);
             if (sectionIndex == null) {
                 // No sections available
@@ -207,11 +209,18 @@ public class CollaborativeBuildManager {
         BuildSection section = build.sections.get(sectionIndex);
         BlockPlacement block = section.getNextBlock();
         
-        if (block == null) {
+        // If current section is complete, try to reassign Steve to another section
+        if (block == null && section.isComplete()) {
+            SteveMod.LOGGER.info("Steve '{}' completed {} section, looking for more work...", 
+                steveName, section.sectionName);
+            
+            // Remove old assignment and find new work
+            build.steveToSectionMap.remove(steveName);
+            sectionIndex = assignSteveToSection(build, steveName);
+            
             if (sectionIndex != null) {
                 section = build.sections.get(sectionIndex);
                 block = section.getNextBlock();
-                if (block != null) {                }
             }
         }
         
@@ -223,7 +232,7 @@ public class CollaborativeBuildManager {
      * Prioritizes unassigned sections, but allows helping on large sections
      * Returns the section index, or null if all sections are complete
      */
-    private static Integer assignSteveToSection(CollaborativeBuild build, String steveName) {
+    public static Integer assignSteveToSection(CollaborativeBuild build, String steveName) {
         // First pass: Find a section that isn't complete and isn't already assigned
         for (int i = 0; i < build.sections.size(); i++) {
             BuildSection section = build.sections.get(i);

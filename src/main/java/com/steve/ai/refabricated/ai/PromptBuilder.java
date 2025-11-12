@@ -25,14 +25,13 @@ public class PromptBuilder {
             
             RULES:
             1. ALWAYS use "hostile" for attack target (mobs, monsters, creatures)
-            2. STRUCTURE OPTIONS: house, oldhouse, powerplant, castle, tower, barn, modern
-            3. house/oldhouse/powerplant = pre-built NBT templates (auto-size)
-            4. castle/tower/barn/modern = procedural (castle=14x10x14, tower=6x6x16, barn=12x8x14)
-            5. Use 2-3 block types: oak_planks, cobblestone, glass_pane, stone_bricks
-            6. NO extra pathfind tasks unless explicitly requested
-            7. Keep reasoning under 15 words
-            8. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
-            9. MINING: Can mine any ore (iron, diamond, coal, etc)
+            2. STRUCTURE OPTIONS: any search string, no special characters, spaces allowed (e.g. "old house", "wheat farm", etc.)
+            3. castle/tower/barn/modern structures = predefined, procedurally generated (castle=14x10x14, tower=6x6x16, barn=12x8x14)
+            4. Use 2-3 block types: oak_planks, cobblestone, glass_pane, stone_bricks
+            5. NO extra pathfind tasks unless explicitly requested
+            6. Keep reasoning under 15 words
+            7. COLLABORATIVE BUILDING: Multiple Steves can work on same structure simultaneously
+            8. MINING: Can mine any ore (iron, diamond, coal, etc)
             
             EXAMPLES (copy these formats exactly):
             
